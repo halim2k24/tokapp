@@ -204,3 +204,4 @@ def convert_to_binary(image_path):
     binary_image_path = f"images/gray/binary_{os.path.basename(image_path)}"
     binary_image.save(binary_image_path)
     return binary_image_path
+
