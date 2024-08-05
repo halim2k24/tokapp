@@ -1,0 +1,23 @@
+[
+    {
+        "name": "C1",
+        "shape": "Rectangle",
+        "image_path": "images/C1_1721961616.png",
+        "additional_images": []
+    },
+    {
+        "name": "C2",
+        "shape": "Rectangle",
+        "image_path": "images/C2_1721962129.png"
+    },
+    {
+        "name": "C3",
+        "shape": "Rectangle",
+        "image_path": "images/C4_1721962319.png"
+    },
+    {
+        "name": "C4",
+        "shape": "Rectangle",
+        "image_path": "images/C4_1722232759.png"
+    }
+]
