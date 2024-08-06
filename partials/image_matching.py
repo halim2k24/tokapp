@@ -141,7 +141,7 @@ def adjust_box_position(px, py, cx, cy, half_box_size):
     return (px, py, ox, oy)
 
 
-def draw_detected_object_boxes(draw, centers, contours, box_size):
+def draw_detected_object_boxes(draw, centers, contours, box_size, image_array):
     half_box_size = box_size // 2
     for center, contour in zip(centers, contours):
         if len(contour) > 0:
@@ -150,6 +150,25 @@ def draw_detected_object_boxes(draw, centers, contours, box_size):
             px, py = point
 
             px, py, ox, oy = adjust_box_position(px, py, cx, cy, half_box_size)
+
+            initial_px, initial_py = px, py
+            initial_ox, initial_oy = ox, oy
+
+            while (has_white_under_box(image_array, px, py, half_box_size) or
+                   is_outside_image(px, py, image_array.shape)):
+                px, py = move_box_left_or_right(px, py, half_box_size, image_array.shape)
+                ox, oy = adjust_opposite_box_position(px, py, cx, cy)
+
+                if not is_near(px, py, initial_px, initial_py, half_box_size):
+                    break
+
+            while (has_white_under_box(image_array, ox, oy, half_box_size) or
+                   is_outside_image(ox, oy, image_array.shape)):
+                ox, oy = move_box_left_or_right(ox, oy, half_box_size, image_array.shape)
+                px, py = adjust_opposite_box_position(ox, oy, cx, cy)
+
+                if not is_near(ox, oy, initial_ox, initial_oy, half_box_size):
+                    break
 
             draw.rectangle([px - half_box_size, py - half_box_size, px + half_box_size, py + half_box_size],
                            outline="red", width=2)
@@ -162,9 +181,50 @@ def draw_detected_object_boxes(draw, centers, contours, box_size):
             draw.ellipse((cx - 2, cy - 2, cx + 2, cy + 2), fill="blue")
 
 
+def adjust_opposite_box_position(px, py, cx, cy):
+    ox = 2 * cx - px
+    oy = 2 * cy - py
+    return ox, oy
+
+
+def move_box_left_or_right(px, py, half_box_size, image_shape):
+    direction = np.random.choice([-1, 1])  # Randomly choose left or right
+    new_px = px + direction * half_box_size * 2
+    new_px = np.clip(new_px, half_box_size, image_shape[1] - half_box_size)
+    return new_px, py
+
+
+def is_outside_image(px, py, image_shape):
+    return px < 0 or py < 0 or px >= image_shape[1] or py >= image_shape[0]
+
+
+def is_near(px, py, initial_px, initial_py, threshold):
+    return np.sqrt((px - initial_px) ** 2 + (py - initial_py) ** 2) < threshold
+
+
+def has_white_under_box(image_array, px, py, half_box_size):
+    box = image_array[py - half_box_size:py + half_box_size, px - half_box_size:px + half_box_size]
+    return np.any(box == 255)
+
+
+def move_box(px, py, half_box_size, image_shape, cx, cy):
+    angle = np.arctan2(py - cy, px - cx)
+    new_px = int(cx + np.cos(angle) * (half_box_size * 2))
+    new_py = int(cy + np.sin(angle) * (half_box_size * 2))
+    new_px = np.clip(new_px, half_box_size, image_shape[1] - half_box_size)
+    new_py = np.clip(new_py, half_box_size, image_shape[0] - half_box_size)
+    return new_px, new_py
+
+
 def calculate_and_display_matches(image_view, reference_image_path, larger_image_path):
     binary_reference_image_path = convert_to_binary(reference_image_path)
     binary_larger_image_path = convert_to_binary(larger_image_path)
+
+    # Display segmented images in a new window
+    reference_image = Image.open(binary_reference_image_path)
+    larger_image = Image.open(binary_larger_image_path)
+    reference_image.show(title="Segmented Reference Image")
+    larger_image.show(title="Segmented Larger Image")
 
     boxes, match_percentages, centers, contours, total_10_percent_objects = find_and_match_object(
         binary_reference_image_path, binary_larger_image_path, threshold=0.8, overlap_thresh=0.3
@@ -192,11 +252,16 @@ def calculate_and_display_matches(image_view, reference_image_path, larger_image
             draw.text((box[0], box[1] - 20), f'#{i + 1}', fill="blue")
 
     box_size = 50  # Adjust the box size as needed
-    draw_detected_object_boxes(draw, centers, contours, box_size)
+    draw_detected_object_boxes(draw, centers, contours, box_size,
+                               cv2.imread(binary_larger_image_path, cv2.IMREAD_GRAYSCALE))
+
     draw.text((10, 30), f'Total Objects Matching >= 10%: {total_10_percent_objects}', fill="blue")
 
     image_view.add_thumbnail(detected_image_pil)
     image_view.update_image()
+
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
 
 
 def convert_to_binary(image_path):
@@ -206,4 +271,3 @@ def convert_to_binary(image_path):
     binary_image_path = f"images/gray/binary_{os.path.basename(image_path)}"
     binary_image.save(binary_image_path)
     return binary_image_path
-

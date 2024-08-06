@@ -16,7 +16,7 @@ from partials.properties_panel import PropertiesPanel
 from helper.shared_state import SharedImage
 from partials.task_panel import TaskPanel
 from menu import MenuBar
-from partials.image_matching import find_and_match_object, calculate_and_display_matches  # Import the matching function
+from partials.image_matching import calculate_and_display_matches  # Import the matching function
 
 
 class HomeScreen:
