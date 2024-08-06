@@ -4,6 +4,7 @@ import numpy as np
 from skimage.metrics import structural_similarity as ssim
 from PIL import Image, ImageDraw, ImageOps
 
+
 def extract_objects(image):
     blurred = cv2.GaussianBlur(image, (5, 5), 0)
     thresh = cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
@@ -28,6 +29,7 @@ def extract_objects(image):
         objects.append((obj, (x, y, w, h), (cx, cy), cnt))
 
     return objects
+
 
 def non_max_suppression(boxes, overlapThresh):
     if len(boxes) == 0:
@@ -63,6 +65,7 @@ def non_max_suppression(boxes, overlapThresh):
         idxs = np.delete(idxs, np.concatenate(([last], np.where(overlap > overlapThresh)[0])))
 
     return boxes[pick].astype("int")
+
 
 def find_and_match_object(reference_image_path, larger_image_path, threshold=0.8, overlap_thresh=0.3):
     reference_image = cv2.imread(reference_image_path, cv2.IMREAD_GRAYSCALE)
@@ -124,21 +127,19 @@ def find_and_match_object(reference_image_path, larger_image_path, threshold=0.8
 
     return boxes, scores, centers, contours, count_10_percent
 
+
 def adjust_box_position(px, py, cx, cy, half_box_size):
-    # Calculate the vector from the object center to the contour point
     vx = px - cx
     vy = py - cy
-    # Normalize the vector
-    mag = np.sqrt(vx**2 + vy**2)
+    mag = np.sqrt(vx ** 2 + vy ** 2)
     vx /= mag
     vy /= mag
-    # Scale the vector to move the box outside the object
-    scale_factor = 1.5  # Adjust this factor as needed
-    px = int(px + vx * half_box_size * scale_factor)
-    py = int(py + vy * half_box_size * scale_factor)
+    px = int(px + vx * half_box_size)
+    py = int(py + vy * half_box_size)
     ox = int(cx + (cx - px))
     oy = int(cy + (cy - py))
     return (px, py, ox, oy)
+
 
 def draw_detected_object_boxes(draw, centers, contours, box_size):
     half_box_size = box_size // 2
@@ -148,18 +149,18 @@ def draw_detected_object_boxes(draw, centers, contours, box_size):
             point = contour[0][0]
             px, py = point
 
-            # Adjust the box position to be outside the object
             px, py, ox, oy = adjust_box_position(px, py, cx, cy, half_box_size)
 
-            # Draw the boxes and lines
-            draw.rectangle([px - half_box_size, py - half_box_size, px + half_box_size, py + half_box_size], outline="red", width=2)
-            draw.rectangle([ox - half_box_size, oy - half_box_size, ox + half_box_size, oy + half_box_size], outline="red", width=2)
+            draw.rectangle([px - half_box_size, py - half_box_size, px + half_box_size, py + half_box_size],
+                           outline="red", width=2)
+            draw.rectangle([ox - half_box_size, oy - half_box_size, ox + half_box_size, oy + half_box_size],
+                           outline="red", width=2)
             draw.line([px, py, cx, cy], fill="red", width=1)
             draw.line([ox, oy, cx, cy], fill="red", width=1)
-            # Draw center points
             draw.ellipse((px - 2, py - 2, px + 2, py + 2), fill="green")
             draw.ellipse((ox - 2, oy - 2, ox + 2, oy + 2), fill="green")
             draw.ellipse((cx - 2, cy - 2, cx + 2, cy + 2), fill="blue")
+
 
 def calculate_and_display_matches(image_view, reference_image_path, larger_image_path):
     binary_reference_image_path = convert_to_binary(reference_image_path)
@@ -190,12 +191,13 @@ def calculate_and_display_matches(image_view, reference_image_path, larger_image
             draw.text((center_x + radius + 5, center_y - 10), f'({center_x}, {center_y})', fill="red")
             draw.text((box[0], box[1] - 20), f'#{i + 1}', fill="blue")
 
-    box_size = 50  # Increase the box size as needed
+    box_size = 50  # Adjust the box size as needed
     draw_detected_object_boxes(draw, centers, contours, box_size)
     draw.text((10, 30), f'Total Objects Matching >= 10%: {total_10_percent_objects}', fill="blue")
 
     image_view.add_thumbnail(detected_image_pil)
     image_view.update_image()
+
 
 def convert_to_binary(image_path):
     image = Image.open(image_path)
@@ -204,4 +206,3 @@ def convert_to_binary(image_path):
     binary_image_path = f"images/gray/binary_{os.path.basename(image_path)}"
     binary_image.save(binary_image_path)
     return binary_image_path
-
