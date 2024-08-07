@@ -142,12 +142,11 @@ def adjust_box_position(px, py, cx, cy, half_box_size):
 
 
 def move_box_away(px, py, cx, cy, half_box_size, image_shape, image_array):
-    attempts = 0
-    max_attempts = 36
-    angle_step = 10  # 10 degrees step
     angle = 0
+    max_angle = 360
+    step = 10  # Step by 10 degrees
 
-    while attempts < max_attempts:
+    while angle < max_angle:
         angle_rad = np.radians(angle)
         new_px = int(cx + np.cos(angle_rad) * (px - cx) - np.sin(angle_rad) * (py - cy))
         new_py = int(cy + np.sin(angle_rad) * (px - cx) + np.cos(angle_rad) * (py - cy))
@@ -155,13 +154,43 @@ def move_box_away(px, py, cx, cy, half_box_size, image_shape, image_array):
         new_px = np.clip(new_px, half_box_size, image_shape[1] - half_box_size)
         new_py = np.clip(new_py, half_box_size, image_shape[0] - half_box_size)
 
-        if not has_white_under_box(image_array, new_px, new_py, half_box_size):
-            return new_px, new_py
+        ox = int(cx + (cx - new_px))
+        oy = int(cy + (cy - new_py))
 
-        angle += angle_step
-        attempts += 1
+        ox = np.clip(ox, half_box_size, image_shape[1] - half_box_size)
+        oy = np.clip(oy, half_box_size, image_shape[0] - half_box_size)
 
-    return px, py
+        if not has_white_under_box(image_array, new_px, new_py, half_box_size) and not has_white_under_box(image_array,
+                                                                                                           ox, oy,
+                                                                                                           half_box_size):
+            return new_px, new_py, ox, oy
+
+        angle += step
+
+    return px, py, cx + (cx - px), cy + (cy - py)
+
+
+def ensure_boxes_180_degrees(px, py, cx, cy, half_box_size, image_shape, image_array):
+    direction_x = np.sign(px - cx)
+    direction_y = np.sign(py - cy)
+
+    for offset in range(-half_box_size * 2, half_box_size * 2 + 1, half_box_size):
+        for sign in [-1, 1]:
+            new_px = px + sign * offset
+            new_py = py + sign * offset
+            new_px = np.clip(new_px, half_box_size, image_shape[1] - half_box_size)
+            new_py = np.clip(new_py, half_box_size, image_shape[0] - half_box_size)
+
+            ox = cx + (cx - new_px)
+            oy = cy + (cy - new_py)
+            ox = np.clip(ox, half_box_size, image_shape[1] - half_box_size)
+            oy = np.clip(oy, half_box_size, image_shape[0] - half_box_size)
+
+            if not has_white_under_box(image_array, new_px, new_py, half_box_size) and not has_white_under_box(
+                    image_array, ox, oy, half_box_size):
+                return new_px, new_py, ox, oy
+
+    return px, py, cx, cy
 
 
 def draw_detected_object_boxes(draw, centers, contours, box_size, image_array):
@@ -174,8 +203,7 @@ def draw_detected_object_boxes(draw, centers, contours, box_size, image_array):
 
             px, py, ox, oy = adjust_box_position(px, py, cx, cy, half_box_size)
 
-            px, py = move_box_away(px, py, cx, cy, half_box_size, image_array.shape, image_array)
-            ox, oy = move_box_away(ox, oy, cx, cy, half_box_size, image_array.shape, image_array)
+            px, py, ox, oy = move_box_away(px, py, cx, cy, half_box_size, image_array.shape, image_array)
 
             draw.rectangle([px - half_box_size, py - half_box_size, px + half_box_size, py + half_box_size],
                            outline="red", width=2)
@@ -230,9 +258,6 @@ def calculate_and_display_matches(image_view, reference_image_path, larger_image
 
     image_view.add_thumbnail(detected_image_pil)
     image_view.update_image()
-
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
 
 
 def convert_to_binary(image_path):
