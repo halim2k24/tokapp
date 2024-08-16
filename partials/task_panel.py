@@ -25,6 +25,11 @@ class TaskPanel(tk.Frame):
 
         self.create_widgets()
         self.load_models()
+        self.add_model_button.config(
+            command=lambda: self.on_button_click(self.add_model_button, open_add_new_model)
+        )
+        self.show_model_name_properties = show_model_name_properties
+        self.properties_panel = properties_panel
 
     def create_widgets(self):
         self.title_label_a = tk.Label(self, text=language.translate("task_panel"), bg='white', font=("Helvetica", 16))
@@ -200,16 +205,17 @@ class TaskPanel(tk.Frame):
         self.add_model_button_widget(model_info)
 
     def on_button_click(self, button, command):
-        # Only change color for Add New Model button
-        if button == self.add_model_button or button in self.winfo_children():
-            if self.active_button:
-                try:
-                    self.active_button.config(bg='gray')
-                except tk.TclError:
-                    pass  # Ignore error if the button no longer exists
-            button.config(bg='#00008B')
-            self.active_button = button
+        if self.active_button:
+            self.active_button.config(bg='gray')
+        button.config(bg='#00008B')
+        self.active_button = button
+        self.reset_buttons()
         command()
+
+    # def reset_buttons(self):
+    #     self.active_button = None
+    #     for button in self.buttons.values():
+    #         button.config(bg='white')
 
     def reset_buttons(self):
         if self.active_button:

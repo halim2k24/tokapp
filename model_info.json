@@ -1,23 +1,24 @@
 [
     {
-        "name": "C1",
+        "name": "a",
         "shape": "Rectangle",
-        "image_path": "images/C1_1721961616.png",
-        "additional_images": []
+        "image_path": "images/a_1723101606.png",
+        "centerX": 147,
+        "centerY": 151,
+        "width": 228,
+        "height": 229,
+        "radius": 114,
+        "diameter": 228
     },
     {
-        "name": "C2",
+        "name": "ko",
         "shape": "Rectangle",
-        "image_path": "images/C2_1721962129.png"
-    },
-    {
-        "name": "C3",
-        "shape": "Rectangle",
-        "image_path": "images/C4_1721962319.png"
-    },
-    {
-        "name": "C4",
-        "shape": "Rectangle",
-        "image_path": "images/C4_1722232759.png"
+        "image_path": "images/ko_1723104670.png",
+        "centerX": 171,
+        "centerY": 148,
+        "width": 228,
+        "height": 229,
+        "radius": 114,
+        "diameter": 228
     }
 ]

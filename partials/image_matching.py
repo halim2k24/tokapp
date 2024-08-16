@@ -192,7 +192,6 @@ def ensure_boxes_180_degrees(px, py, cx, cy, half_box_size, image_shape, image_a
 
     return px, py, cx, cy
 
-
 def draw_detected_object_boxes(draw, centers, contours, box_size, image_array):
     half_box_size = box_size // 2
     for center, contour in zip(centers, contours):
@@ -200,6 +199,15 @@ def draw_detected_object_boxes(draw, centers, contours, box_size, image_array):
             cx, cy = center
             point = contour[0][0]
             px, py = point
+
+            # Adjust the position so that the connecting line is either horizontal or vertical
+            # Align horizontally (same y) or vertically (same x) as necessary
+            if abs(px - cx) > abs(py - cy):
+                # Make it a horizontal line (adjust py to match cy)
+                py = cy
+            else:
+                # Make it a vertical line (adjust px to match cx)
+                px = cx
 
             px, py, ox, oy = adjust_box_position(px, py, cx, cy, half_box_size)
 

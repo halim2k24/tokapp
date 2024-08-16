@@ -19,6 +19,9 @@ class PropertiesPanel(tk.Frame):
         self.properties_handler = PropertiesHandler(self)
         self.model_properties = ModelProperties(self)
 
+    def show_model_properties(self, model_info):
+        self.model_properties.show_model_properties(model_info)
+
     def set_image_view(self, image_view):
         self.image_view = image_view
 
@@ -114,5 +117,4 @@ class PropertiesPanel(tk.Frame):
         # Implement logic to determine if the properties panel is in new model mode
         # This could be based on whether the new model creation form is visible or active
         return hasattr(self, 'new_model_label') and self.new_model_label.winfo_exists()
-
 

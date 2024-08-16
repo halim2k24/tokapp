@@ -16,7 +16,7 @@ from partials.properties_panel import PropertiesPanel
 from helper.shared_state import SharedImage
 from partials.task_panel import TaskPanel
 from menu import MenuBar
-from partials.image_matching import calculate_and_display_matches  # Import the matching function
+from partials.image_matching import calculate_and_display_matches, extract_objects  # Import the matching function
 
 
 class HomeScreen:
@@ -240,6 +240,11 @@ class HomeScreen:
 
         if not model_updated:
             model_info['additional_images'] = [unique_image_name]
+            # Add the new model details
+            model_info['center_x'] = model_info.get('center_x')
+            model_info['center_y'] = model_info.get('center_y')
+            model_info['width'] = model_info.get('width')
+            model_info['height'] = model_info.get('height')
             data.append(model_info)
 
         with open(json_path, "w") as json_file:
@@ -293,12 +298,76 @@ class HomeScreen:
             self.status_bar.ok_label.pack_forget()
             self.status_bar.ng_label.pack(side='left')
 
+    def calculate_object_properties(self, image_path):
+        image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+        blurred = cv2.GaussianBlur(image, (5, 5), 0)
+        thresh = cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
+        edged = cv2.Canny(thresh, 50, 150)
+        contours, _ = cv2.findContours(edged, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        if len(contours) == 0:
+            return None, None, None, None, None, None
+
+        cnt = max(contours, key=cv2.contourArea)
+        x, y, w, h = cv2.boundingRect(cnt)
+        centerX, centerY = x + w // 2, y + h // 2
+        radius = int(max(w, h) / 2)
+        diameter = radius * 2
+
+        return centerX, centerY, w, h, radius, diameter
+
     def show_model_name_properties(self, model_info=None):
-        self.selected_model_info = model_info
-        self.properties_panel.model_properties.show_model_properties(model_info)
+        if model_info:
+            self.selected_model_info = model_info
+            self.properties_panel.model_properties.show_model_properties(model_info)
+
+            image_path = model_info.get('image_path', '')
+            if image_path:
+                centerX, centerY, w, h, radius, diameter = self.calculate_object_properties(image_path)
+                if centerX is not None and centerY is not None and w is not None and h is not None:
+                    model_info['centerX'] = centerX
+                    model_info['centerY'] = centerY
+                    model_info['width'] = w
+                    model_info['height'] = h
+                    model_info['radius'] = radius
+                    model_info['diameter'] = diameter
+
+                    json_path = "model_info.json"
+                    try:
+                        with open(json_path, "r") as json_file:
+                            data = json.load(json_file)
+                    except (FileNotFoundError, json.JSONDecodeError):
+                        data = []
+
+                    model_found = False
+                    for model in data:
+                        if model.get('name') == model_info['name']:
+                            model['centerX'] = model_info['centerX']
+                            model['centerY'] = model_info['centerY']
+                            model['width'] = model_info['width']
+                            model['height'] = model_info['height']
+                            model['radius'] = model_info['radius']
+                            model['diameter'] = model_info['diameter']
+                            model_found = True
+                            break
+
+                    if not model_found:
+                        data.append(model_info)
+
+                    with open(json_path, "w") as json_file:
+                        json.dump(data, json_file, indent=4)
 
     def open_add_new_model(self):
         self.properties_panel.show_add_new_model_properties()
+        self.selected_model_info = None  # Clear any previously selected model
+        self.task_panel.highlight_model_button(self.task_panel.add_model_button)
+
+    def highlight_model_button(self, button):
+        for widget in self.winfo_children():
+            if isinstance(widget, tk.Button) and widget != self.add_model_button:
+                widget.config(bg='gray')
+        button.config(bg='#00008B')
+        self.active_button = button
 
     def picking_settings(self):
         self.stop_video_capture()
