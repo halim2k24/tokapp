@@ -3,6 +3,7 @@ import cv2
 import numpy as np
 from skimage.metrics import structural_similarity as ssim
 from PIL import Image, ImageDraw, ImageOps
+import math
 
 
 def extract_objects(image):
@@ -160,9 +161,8 @@ def move_box_away(px, py, cx, cy, half_box_size, image_shape, image_array):
         ox = np.clip(ox, half_box_size, image_shape[1] - half_box_size)
         oy = np.clip(oy, half_box_size, image_shape[0] - half_box_size)
 
-        if not has_white_under_box(image_array, new_px, new_py, half_box_size) and not has_white_under_box(image_array,
-                                                                                                           ox, oy,
-                                                                                                           half_box_size):
+        if not has_white_under_box(image_array, new_px, new_py, half_box_size) and not has_white_under_box(
+                image_array, ox, oy, half_box_size):
             return new_px, new_py, ox, oy
 
         angle += step
@@ -170,58 +170,17 @@ def move_box_away(px, py, cx, cy, half_box_size, image_shape, image_array):
     return px, py, cx + (cx - px), cy + (cy - py)
 
 
-def ensure_boxes_180_degrees(px, py, cx, cy, half_box_size, image_shape, image_array):
-    direction_x = np.sign(px - cx)
-    direction_y = np.sign(py - cy)
+def calculate_angle(px1, py1, px2, py2):
+    # Calculate the angle between the two points that define the box's center line
+    delta_x = px2 - px1
+    delta_y = py2 - py1
+    angle = math.degrees(math.atan2(delta_y, delta_x))
 
-    for offset in range(-half_box_size * 2, half_box_size * 2 + 1, half_box_size):
-        for sign in [-1, 1]:
-            new_px = px + sign * offset
-            new_py = py + sign * offset
-            new_px = np.clip(new_px, half_box_size, image_shape[1] - half_box_size)
-            new_py = np.clip(new_py, half_box_size, image_shape[0] - half_box_size)
+    # Convert to positive angle if necessary
+    if angle < 0:
+        angle += 360
 
-            ox = cx + (cx - new_px)
-            oy = cy + (cy - new_py)
-            ox = np.clip(ox, half_box_size, image_shape[1] - half_box_size)
-            oy = np.clip(oy, half_box_size, image_shape[0] - half_box_size)
-
-            if not has_white_under_box(image_array, new_px, new_py, half_box_size) and not has_white_under_box(
-                    image_array, ox, oy, half_box_size):
-                return new_px, new_py, ox, oy
-
-    return px, py, cx, cy
-
-def draw_detected_object_boxes(draw, centers, contours, box_size, image_array):
-    half_box_size = box_size // 2
-    for center, contour in zip(centers, contours):
-        if len(contour) > 0:
-            cx, cy = center
-            point = contour[0][0]
-            px, py = point
-
-            # Adjust the position so that the connecting line is either horizontal or vertical
-            # Align horizontally (same y) or vertically (same x) as necessary
-            if abs(px - cx) > abs(py - cy):
-                # Make it a horizontal line (adjust py to match cy)
-                py = cy
-            else:
-                # Make it a vertical line (adjust px to match cx)
-                px = cx
-
-            px, py, ox, oy = adjust_box_position(px, py, cx, cy, half_box_size)
-
-            px, py, ox, oy = move_box_away(px, py, cx, cy, half_box_size, image_array.shape, image_array)
-
-            draw.rectangle([px - half_box_size, py - half_box_size, px + half_box_size, py + half_box_size],
-                           outline="red", width=2)
-            draw.rectangle([ox - half_box_size, oy - half_box_size, ox + half_box_size, oy + half_box_size],
-                           outline="red", width=2)
-            draw.line([px, py, cx, cy], fill="red", width=1)
-            draw.line([ox, oy, cx, cy], fill="red", width=1)
-            draw.ellipse((px - 2, py - 2, px + 2, py + 2), fill="green")
-            draw.ellipse((ox - 2, oy - 2, ox + 2, oy + 2), fill="green")
-            draw.ellipse((cx - 2, cy - 2, cx + 2, cy + 2), fill="blue")
+    return angle
 
 
 def has_white_under_box(image_array, px, py, half_box_size):
@@ -275,3 +234,77 @@ def convert_to_binary(image_path):
     binary_image_path = f"images/gray/binary_{os.path.basename(image_path)}"
     binary_image.save(binary_image_path)
     return binary_image_path
+
+
+def draw_detected_object_boxes(draw, centers, contours, box_size, image_array, circle_offset=30):
+    half_box_size = box_size // 2
+    for center, contour in zip(centers, contours):
+        if len(contour) > 0:
+            cx, cy = center
+            point = contour[0][0]
+            px, py = point
+
+            # Adjust the position so that the connecting line is either horizontal or vertical
+            if abs(px - cx) > abs(py - cy):
+                py = cy  # Make it a horizontal line
+            else:
+                px = cx  # Make it a vertical line
+
+            # Adjust box positions
+            px, py, ox, oy = adjust_box_position(px, py, cx, cy, half_box_size)
+            px, py, ox, oy = move_box_away(px, py, cx, cy, half_box_size, image_array.shape, image_array)
+
+            # Calculate box center positions for connecting line
+            box1_center_x, box1_center_y = px, py
+            box2_center_x, box2_center_y = ox, oy
+
+            # Drawing rectangles around the points
+            draw.rectangle(
+                [px - half_box_size, py - half_box_size, px + half_box_size, py + half_box_size],
+                outline="red", width=2)
+            draw.rectangle(
+                [ox - half_box_size, oy - half_box_size, ox + half_box_size, oy + half_box_size],
+                outline="red", width=2)
+
+            # Drawing connecting lines from box center to object center
+            draw.line([box1_center_x, box1_center_y, cx, cy], fill="red", width=2)
+            draw.line([box2_center_x, box2_center_y, cx, cy], fill="red", width=2)
+
+            # Drawing ellipses for points
+            draw.ellipse((cx - 2, cy - 2, cx + 2, cy + 2), fill="blue")
+
+            # Drawing circles instead of rectangles around objects with offset
+            radius = int(np.linalg.norm(np.array([px, py]) - np.array([cx, cy])) - circle_offset)
+            draw.ellipse((cx - radius, cy - radius, cx + radius, cy + radius), outline="green", width=3)
+
+            # Calculate the angle between the box's center line and the connecting line
+            box_angle = calculate_angle(px, py, ox, oy)
+            connecting_line_angle = calculate_angle(box1_center_x, box1_center_y, cx, cy)
+
+            # Adjust boxes to ensure the connecting line remains at 0 degrees
+            angle_difference = box_angle - connecting_line_angle
+            if abs(angle_difference) > 0:
+                # Rotate the boxes to align with the connecting line
+                box1_center_x, box1_center_y = rotate_point(px, py, cx, cy, -angle_difference)
+                box2_center_x, box2_center_y = rotate_point(ox, oy, cx, cy, -angle_difference)
+
+                # Update the box positions after rotation
+                draw.rectangle(
+                    [box1_center_x - half_box_size, box1_center_y - half_box_size,
+                     box1_center_x + half_box_size, box1_center_y + half_box_size],
+                    outline="red", width=2)
+                draw.rectangle(
+                    [box2_center_x - half_box_size, box2_center_y - half_box_size,
+                     box2_center_x + half_box_size, box2_center_y + half_box_size],
+                    outline="red", width=2)
+
+            # Display the angle difference next to the box
+            draw.text((px + 15, py - 15), f'{angle_difference:.2f}°', fill="yellow")
+
+
+def rotate_point(px, py, cx, cy, angle):
+    """Rotate point (px, py) around center (cx, cy) by the given angle."""
+    angle_rad = np.radians(angle)
+    new_x = int(cx + math.cos(angle_rad) * (px - cx) - math.sin(angle_rad) * (py - cy))
+    new_y = int(cy + math.sin(angle_rad) * (px - cx) + math.cos(angle_rad) * (py - cy))
+    return new_x, new_y
