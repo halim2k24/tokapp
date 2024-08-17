@@ -20,5 +20,27 @@
         "height": 229,
         "radius": 114,
         "diameter": 228
+    },
+    {
+        "name": "sd",
+        "shape": "Rectangle",
+        "image_path": "images/sd_1723868725.png",
+        "centerX": 201,
+        "centerY": 198,
+        "width": 364,
+        "height": 364,
+        "radius": 182,
+        "diameter": 364
+    },
+    {
+        "name": "cccccccx",
+        "shape": "Rectangle",
+        "image_path": "images/cccccccx_1723868962.png",
+        "centerX": 129,
+        "centerY": 130,
+        "width": 229,
+        "height": 229,
+        "radius": 114,
+        "diameter": 228
     }
 ]
