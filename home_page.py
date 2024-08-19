@@ -191,7 +191,8 @@ class HomeScreen:
                     self.task_panel.active_button.config(bg='#00008B')
 
                 # Calculate and display match percentages
-                calculate_and_display_matches(self.image_view, model_info['image_path'], file_path)
+                # calculate_and_display_matches(self.image_view, model_info['image_path'], file_path)
+                calculate_and_display_matches(self.image_view, model_info['image_path'], file_path, model_info['name'])
             else:
                 print("Model info not found.")  # Debugging line
                 messagebox.showerror("Error",

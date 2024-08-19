@@ -57,6 +57,7 @@ class Language:
                 'center_x': 'Center X',
                 'center_y': 'Center Y',
                 'rotation_angle': 'Rotation Angle',
+                'box_size': 'Box Size',
             },
             'jp': {
                 'home': 'ホーム',
