@@ -4,6 +4,7 @@ import numpy as np
 from skimage.metrics import structural_similarity as ssim
 from PIL import Image, ImageDraw, ImageOps
 import math
+import json
 
 
 def extract_objects(image):
@@ -142,10 +143,11 @@ def adjust_box_position(px, py, cx, cy, half_box_size):
     return (px, py, ox, oy)
 
 
-def move_box_away(px, py, cx, cy, half_box_size, image_shape, image_array):
+def move_box_away(px, py, cx, cy, half_box_size, image_shape, image_array, other_centers):
     angle = 0
     max_angle = 360
-    step = 10  # Step by 10 degrees
+    step = 22  # Step by 22 degrees
+    dynamic_step = step
 
     while angle < max_angle:
         angle_rad = np.radians(angle)
@@ -161,26 +163,20 @@ def move_box_away(px, py, cx, cy, half_box_size, image_shape, image_array):
         ox = np.clip(ox, half_box_size, image_shape[1] - half_box_size)
         oy = np.clip(oy, half_box_size, image_shape[0] - half_box_size)
 
-        if not has_white_under_box(image_array, new_px, new_py, half_box_size) and not has_white_under_box(
-                image_array, ox, oy, half_box_size):
+        # Check proximity to other centers and move away if too close
+        too_close = any(np.linalg.norm(np.array([new_px, new_py]) - np.array([center_x, center_y])) < 2 * half_box_size
+                        for center_x, center_y in other_centers)
+
+        if not too_close and not has_white_under_box(image_array, new_px, new_py,
+                                                     half_box_size) and not has_white_under_box(image_array, ox, oy,
+                                                                                                half_box_size):
             return new_px, new_py, ox, oy
 
-        angle += step
+        # Dynamically reduce step size if no position found
+        dynamic_step = max(1, dynamic_step - 2)
+        angle += dynamic_step
 
     return px, py, cx + (cx - px), cy + (cy - py)
-
-
-def calculate_angle(px1, py1, px2, py2):
-    # Calculate the angle between the two points that define the box's center line
-    delta_x = px2 - px1
-    delta_y = py2 - py1
-    angle = math.degrees(math.atan2(delta_y, delta_x))
-
-    # Convert to positive angle if necessary
-    if angle < 0:
-        angle += 360
-
-    return angle
 
 
 def has_white_under_box(image_array, px, py, half_box_size):
@@ -188,9 +184,25 @@ def has_white_under_box(image_array, px, py, half_box_size):
     return np.any(box == 255)
 
 
-def calculate_and_display_matches(image_view, reference_image_path, larger_image_path):
+def calculate_and_display_matches(image_view, reference_image_path, larger_image_path, model_name):
     binary_reference_image_path = convert_to_binary(reference_image_path)
     binary_larger_image_path = convert_to_binary(larger_image_path)
+
+    # Load the model JSON file to get the box_size
+    json_path = "model_info.json"
+    default_box_size = 50  # Set your default box size here
+    box_size = default_box_size
+
+    try:
+        with open(json_path, "r") as json_file:
+            data = json.load(json_file)
+            # Find the model by name and get its box_size if present
+            for model in data:
+                if model.get('name') == model_name:
+                    box_size = model.get('box_size', default_box_size)
+                    break
+    except (FileNotFoundError, json.JSONDecodeError):
+        print("Error loading model info. Using default box size.")
 
     boxes, match_percentages, centers, contours, total_10_percent_objects = find_and_match_object(
         binary_reference_image_path, binary_larger_image_path, threshold=0.8, overlap_thresh=0.3
@@ -208,7 +220,6 @@ def calculate_and_display_matches(image_view, reference_image_path, larger_image
 
     for i, (box, score, center) in enumerate(zip(boxes, match_percentages, centers)):
         if score >= 35:
-            draw.rectangle([box[0], box[1], box[2], box[3]], outline="green", width=2)
             draw.text((box[0], box[1] - 10), f'{score:.2f}%', fill="green")
 
             radius = 5
@@ -217,9 +228,8 @@ def calculate_and_display_matches(image_view, reference_image_path, larger_image
             draw.text((center_x + radius + 5, center_y - 10), f'({center_x}, {center_y})', fill="red")
             draw.text((box[0], box[1] - 20), f'#{i + 1}', fill="blue")
 
-    box_size = 50  # Adjust the box size as needed
     draw_detected_object_boxes(draw, centers, contours, box_size,
-                               cv2.imread(binary_larger_image_path, cv2.IMREAD_GRAYSCALE))
+                               cv2.imread(binary_larger_image_path, cv2.IMREAD_GRAYSCALE), centers)
 
     draw.text((10, 30), f'Total Objects Matching >= 10%: {total_10_percent_objects}', fill="blue")
 
@@ -236,7 +246,10 @@ def convert_to_binary(image_path):
     return binary_image_path
 
 
-def draw_detected_object_boxes(draw, centers, contours, box_size, image_array, circle_offset=30):
+def draw_detected_object_boxes(draw, centers, contours, box_size, image_array, other_centers):
+    # Dynamically calculate the circle_offset based on box_size
+    circle_offset = 0.5 * box_size + 5
+
     half_box_size = box_size // 2
     for center, contour in zip(centers, contours):
         if len(contour) > 0:
@@ -252,59 +265,108 @@ def draw_detected_object_boxes(draw, centers, contours, box_size, image_array, c
 
             # Adjust box positions
             px, py, ox, oy = adjust_box_position(px, py, cx, cy, half_box_size)
-            px, py, ox, oy = move_box_away(px, py, cx, cy, half_box_size, image_array.shape, image_array)
+            px, py, ox, oy = move_box_away(px, py, cx, cy, half_box_size, image_array.shape, image_array, other_centers)
 
             # Calculate box center positions for connecting line
             box1_center_x, box1_center_y = px, py
             box2_center_x, box2_center_y = ox, oy
 
-            # Drawing rectangles around the points
-            draw.rectangle(
-                [px - half_box_size, py - half_box_size, px + half_box_size, py + half_box_size],
-                outline="red", width=2)
-            draw.rectangle(
-                [ox - half_box_size, oy - half_box_size, ox + half_box_size, oy + half_box_size],
-                outline="red", width=2)
+            # Calculate the angle between each box center and the object center
+            box1_angle = calculate_angle(box1_center_x, box1_center_y, cx, cy)
+            box2_angle = calculate_angle(box2_center_x, box2_center_y, cx, cy)
+
+            # Find the nearest right angle (0°, 90°, 180°, 270°)
+            adjusted_box1_angle = align_to_nearest_angle(box1_angle)
+            adjusted_box2_angle = align_to_nearest_angle(box2_angle)
+
+            # Continuously adjust the angle until the difference is zero
+            while True:
+                angle1_diff = calculate_angle(box1_center_x, box1_center_y, cx, cy) - adjusted_box1_angle
+                angle2_diff = calculate_angle(box2_center_x, box2_center_y, cx, cy) - adjusted_box2_angle
+
+                if abs(angle1_diff) > 0:
+                    adjusted_box1_angle += angle1_diff
+
+                if abs(angle2_diff) > 0:
+                    adjusted_box2_angle += angle2_diff
+
+                # If the difference is very small (close to zero), stop adjusting
+                if abs(angle1_diff) < 0.1 and abs(angle2_diff) < 0.1:
+                    break
+
+            # Drawing the rotated boxes
+            draw_rotated_rectangle(draw, box1_center_x, box1_center_y, box_size, box_size, adjusted_box1_angle, "red")
+            draw_rotated_rectangle(draw, box2_center_x, box2_center_y, box_size, box_size, adjusted_box2_angle, "red")
 
             # Drawing connecting lines from box center to object center
-            draw.line([box1_center_x, box1_center_y, cx, cy], fill="red", width=2)
-            draw.line([box2_center_x, box2_center_y, cx, cy], fill="red", width=2)
+            draw.line([box1_center_x, box1_center_y, cx, cy], fill="red", width=3)
+            draw.line([box2_center_x, box2_center_y, cx, cy], fill="red", width=3)
 
             # Drawing ellipses for points
             draw.ellipse((cx - 2, cy - 2, cx + 2, cy + 2), fill="blue")
 
-            # Drawing circles instead of rectangles around objects with offset
+            # Drawing circles instead of rectangles around objects with dynamically calculated offset
             radius = int(np.linalg.norm(np.array([px, py]) - np.array([cx, cy])) - circle_offset)
-            draw.ellipse((cx - radius, cy - radius, cx + radius, cy + radius), outline="green", width=3)
+            draw.ellipse((cx - radius, cy - radius, cx + radius, cy + radius), outline="yellow", width=2)
 
-            # Calculate the angle between the box's center line and the connecting line
-            box_angle = calculate_angle(px, py, ox, oy)
-            connecting_line_angle = calculate_angle(box1_center_x, box1_center_y, cx, cy)
+            # Display the adjusted angles next to each box
+            draw.text((box1_center_x + 15, box1_center_y - 15), f'{adjusted_box1_angle:.2f}°', fill="yellow")
+            draw.text((box2_center_x + 15, box2_center_y - 15), f'{adjusted_box2_angle:.2f}°', fill="yellow")
 
-            # Adjust boxes to ensure the connecting line remains at 0 degrees
-            angle_difference = box_angle - connecting_line_angle
-            if abs(angle_difference) > 0:
-                # Rotate the boxes to align with the connecting line
-                box1_center_x, box1_center_y = rotate_point(px, py, cx, cy, -angle_difference)
-                box2_center_x, box2_center_y = rotate_point(ox, oy, cx, cy, -angle_difference)
-
-                # Update the box positions after rotation
-                draw.rectangle(
-                    [box1_center_x - half_box_size, box1_center_y - half_box_size,
-                     box1_center_x + half_box_size, box1_center_y + half_box_size],
-                    outline="red", width=2)
-                draw.rectangle(
-                    [box2_center_x - half_box_size, box2_center_y - half_box_size,
-                     box2_center_x + half_box_size, box2_center_y + half_box_size],
-                    outline="red", width=2)
-
-            # Display the angle difference next to the box
-            draw.text((px + 15, py - 15), f'{angle_difference:.2f}°', fill="yellow")
+            # Display the angle difference between box center line and connecting line
+            draw.text((box1_center_x - 15, box1_center_y + 15), f'Diff: {angle1_diff:.2f}°', fill="cyan")
+            draw.text((box2_center_x - 15, box2_center_y + 15), f'Diff: {angle2_diff:.2f}°', fill="cyan")
 
 
-def rotate_point(px, py, cx, cy, angle):
-    """Rotate point (px, py) around center (cx, cy) by the given angle."""
+def align_to_nearest_angle(angle):
+    """
+    Adjust the angle to ensure that the red box aligns its center line
+    with the connecting line at 0°, 90°, 180°, or 270°.
+    """
+    possible_angles = [0, 90, 180, 270]
+    closest_angle = min(possible_angles, key=lambda x: abs(x - angle))
+    return closest_angle
+
+
+def calculate_angle(px1, py1, px2, py2):
+    """Calculate the angle between two points."""
+    delta_x = px2 - px1
+    delta_y = py2 - py1
+    angle = math.degrees(math.atan2(delta_y, delta_x))
+
+    # Convert to positive angle if necessary
+    if angle < 0:
+        angle += 360
+
+    return angle
+
+
+def draw_rotated_rectangle(draw, center_x, center_y, width, height, angle, outline_color, outline_width=3):
+    """Draw a rotated rectangle around the given center point with a specified outline width."""
     angle_rad = np.radians(angle)
-    new_x = int(cx + math.cos(angle_rad) * (px - cx) - math.sin(angle_rad) * (py - cy))
-    new_y = int(cy + math.sin(angle_rad) * (px - cx) + math.cos(angle_rad) * (py - cy))
-    return new_x, new_y
+    cos_a = np.cos(angle_rad)
+    sin_a = np.sin(angle_rad)
+
+    # Calculate the four corners of the rectangle
+    half_width = width // 2
+    half_height = height // 2
+
+    corners = [
+        (-half_width, -half_height),
+        (half_width, -half_height),
+        (half_width, half_height),
+        (-half_width, half_height)
+    ]
+
+    # Calculate the rotated corners
+    rotated_corners = []
+    for corner in corners:
+        x = center_x + corner[0] * cos_a - corner[1] * sin_a
+        y = center_y + corner[0] * sin_a + corner[1] * cos_a
+        rotated_corners.append((x, y))
+
+    # Draw the rotated rectangle multiple times with a slight offset to simulate thicker borders
+    for i in range(outline_width):
+        offset = i - (outline_width // 2)
+        offset_corners = [(x + offset, y + offset) for (x, y) in rotated_corners]
+        draw.polygon(offset_corners, outline=outline_color)

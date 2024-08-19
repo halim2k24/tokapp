@@ -1,46 +1,44 @@
 [
     {
-        "name": "a",
+        "name": "M1",
         "shape": "Rectangle",
-        "image_path": "images/a_1723101606.png",
-        "centerX": 147,
-        "centerY": 151,
-        "width": 228,
-        "height": 229,
-        "radius": 114,
-        "diameter": 228
+        "image_path": "images/M1_1724041647.png",
+        "centerX": "127",
+        "centerY": "123",
+        "width": "228",
+        "height": "229",
+        "radius": "114",
+        "diameter": "228",
+        "rotation_angle": "",
+        "matching": "",
+        "detection_order": "",
+        "Count": "",
+        "box_size": 66
     },
     {
-        "name": "ko",
+        "name": "M2",
         "shape": "Rectangle",
-        "image_path": "images/ko_1723104670.png",
-        "centerX": 171,
-        "centerY": 148,
-        "width": 228,
-        "height": 229,
-        "radius": 114,
-        "diameter": 228
+        "image_path": "images/M2_1724041710.png"
     },
     {
-        "name": "sd",
+        "name": "M3",
         "shape": "Rectangle",
-        "image_path": "images/sd_1723868725.png",
-        "centerX": 201,
-        "centerY": 198,
-        "width": 364,
-        "height": 364,
-        "radius": 182,
-        "diameter": 364
+        "image_path": "images/M3_1724041738.png"
     },
     {
-        "name": "cccccccx",
+        "name": "M4",
         "shape": "Rectangle",
-        "image_path": "images/cccccccx_1723868962.png",
-        "centerX": 129,
-        "centerY": 130,
-        "width": 229,
-        "height": 229,
-        "radius": 114,
-        "diameter": 228
+        "image_path": "images/M4_1724041757.png",
+        "centerX": "110",
+        "centerY": "109",
+        "width": "195",
+        "height": "194",
+        "radius": "97",
+        "diameter": "194",
+        "rotation_angle": "",
+        "matching": "",
+        "detection_order": "",
+        "Count": "",
+        "box_size": 66
     }
 ]
