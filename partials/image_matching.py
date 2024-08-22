@@ -37,6 +37,7 @@ def non_max_suppression(boxes, overlapThresh):
     if len(boxes) == 0:
         return []
 
+    # If the boxes are in integer form, convert them to float for calculations
     if boxes.dtype.kind == "i":
         boxes = boxes.astype("float")
 
@@ -46,27 +47,51 @@ def non_max_suppression(boxes, overlapThresh):
     x2 = boxes[:, 2]
     y2 = boxes[:, 3]
 
+    # Compute the area of the bounding boxes and sort by the bottom-right y-coordinate of the bounding box
     area = (x2 - x1 + 1) * (y2 - y1 + 1)
     idxs = np.argsort(y2)
 
     while len(idxs) > 0:
         last = len(idxs) - 1
-        i = idxs[last]
+        i = idxs[last]  # Index of the box with the largest bottom-right y-coordinate
         pick.append(i)
 
+        # Find the largest (x, y) coordinates for the start of the box and the smallest (x, y) coordinates for the
+        # end of the box
         xx1 = np.maximum(x1[i], x1[idxs[:last]])
         yy1 = np.maximum(y1[i], y1[idxs[:last]])
         xx2 = np.minimum(x2[i], x2[idxs[:last]])
         yy2 = np.minimum(y2[i], y2[idxs[:last]])
 
+        # Compute the width and height of the overlapping area
         w = np.maximum(0, xx2 - xx1 + 1)
         h = np.maximum(0, yy2 - yy1 + 1)
 
+        # Compute the ratio of overlap
         overlap = (w * h) / area[idxs[:last]]
 
+        # Delete all indices where the overlap is greater than the threshold
         idxs = np.delete(idxs, np.concatenate(([last], np.where(overlap > overlapThresh)[0])))
 
+    # Return only the bounding boxes that were picked
     return boxes[pick].astype("int")
+
+
+def sort_objects_by_order(centers, match_percentages, contours, order):
+    if order == "Ascending X":
+        sorted_objects = sorted(zip(centers, match_percentages, contours), key=lambda x: x[0][0])
+    elif order == "Descending X":
+        sorted_objects = sorted(zip(centers, match_percentages, contours), key=lambda x: x[0][0], reverse=True)
+    elif order == "Ascending Y":
+        sorted_objects = sorted(zip(centers, match_percentages, contours), key=lambda x: x[0][1])
+    elif order == "Descending Y":
+        sorted_objects = sorted(zip(centers, match_percentages, contours), key=lambda x: x[0][1], reverse=True)
+    elif order == "Maximum Matching %":
+        sorted_objects = sorted(zip(centers, match_percentages, contours), key=lambda x: x[1], reverse=True)
+    else:
+        sorted_objects = list(zip(centers, match_percentages, contours))  # Default order if no match
+
+    return zip(*sorted_objects)
 
 
 def find_and_match_object(reference_image_path, larger_image_path, threshold=0.8, overlap_thresh=0.3):
@@ -143,12 +168,10 @@ def adjust_box_position(px, py, cx, cy, half_box_size):
     return (px, py, ox, oy)
 
 
-def move_box_away(px, py, cx, cy, half_box_size, image_shape, image_array, other_centers):
+def move_box_to_best_position(px, py, cx, cy, half_box_size, image_shape, image_array, other_centers):
     angle = 0
     max_angle = 360
-    step = 22  # Step by 22 degrees
-    dynamic_step = step
-
+    step = 20  # 10
     while angle < max_angle:
         angle_rad = np.radians(angle)
         new_px = int(cx + np.cos(angle_rad) * (px - cx) - np.sin(angle_rad) * (py - cy))
@@ -163,19 +186,13 @@ def move_box_away(px, py, cx, cy, half_box_size, image_shape, image_array, other
         ox = np.clip(ox, half_box_size, image_shape[1] - half_box_size)
         oy = np.clip(oy, half_box_size, image_shape[0] - half_box_size)
 
-        # Check proximity to other centers and move away if too close
-        too_close = any(np.linalg.norm(np.array([new_px, new_py]) - np.array([center_x, center_y])) < 2 * half_box_size
-                        for center_x, center_y in other_centers)
-
-        if not too_close and not has_white_under_box(image_array, new_px, new_py,
-                                                     half_box_size) and not has_white_under_box(image_array, ox, oy,
-                                                                                                half_box_size):
+        # Check proximity to other centers and white pixels
+        if not is_box_overlapping_with_others(new_px, new_py, ox, oy, half_box_size, other_centers, image_array):
             return new_px, new_py, ox, oy
 
-        # Dynamically reduce step size if no position found
-        dynamic_step = max(1, dynamic_step - 2)
-        angle += dynamic_step
+        angle += step
 
+    # If no good position is found, return original position
     return px, py, cx + (cx - px), cy + (cy - py)
 
 
@@ -188,21 +205,23 @@ def calculate_and_display_matches(image_view, reference_image_path, larger_image
     binary_reference_image_path = convert_to_binary(reference_image_path)
     binary_larger_image_path = convert_to_binary(larger_image_path)
 
-    # Load the model JSON file to get the box_size
+    # Load the model JSON file to get the box_size and detection_order
     json_path = "model_info.json"
     default_box_size = 50  # Set your default box size here
+    detection_order = "Ascending X"  # Default detection order
     box_size = default_box_size
 
     try:
         with open(json_path, "r") as json_file:
             data = json.load(json_file)
-            # Find the model by name and get its box_size if present
+            # Find the model by name and get its box_size and detection_order if present
             for model in data:
                 if model.get('name') == model_name:
                     box_size = model.get('box_size', default_box_size)
+                    detection_order = model.get('detection_order', detection_order)
                     break
     except (FileNotFoundError, json.JSONDecodeError):
-        print("Error loading model info. Using default box size.")
+        print("Error loading model info. Using default values.")
 
     boxes, match_percentages, centers, contours, total_10_percent_objects = find_and_match_object(
         binary_reference_image_path, binary_larger_image_path, threshold=0.8, overlap_thresh=0.3
@@ -213,20 +232,25 @@ def calculate_and_display_matches(image_view, reference_image_path, larger_image
         print("No matches found.")
         return
 
+    # Sort objects based on detection order
+    centers, match_percentages, contours = sort_objects_by_order(centers, match_percentages, contours, detection_order)
+
     detected_image = cv2.imread(larger_image_path)
     detected_image_pil = Image.fromarray(cv2.cvtColor(detected_image, cv2.COLOR_BGR2RGB))
 
     draw = ImageDraw.Draw(detected_image_pil)
 
-    for i, (box, score, center) in enumerate(zip(boxes, match_percentages, centers)):
+    for i, (center, score, contour) in enumerate(zip(centers, match_percentages, contours)):
         if score >= 35:
-            draw.text((box[0], box[1] - 10), f'{score:.2f}%', fill="green")
-
             radius = 5
             center_x, center_y = center
+
+            # Draw object index
+            draw.text((center_x - 15, center_y - 15), f'#{i + 1}', fill="blue")
+
+            # Draw match percentage and center point
+            draw.text((center_x + 15, center_y - 15), f'{score:.2f}%', fill="green")
             draw.ellipse((center_x - radius, center_y - radius, center_x + radius, center_y + radius), fill="red")
-            draw.text((center_x + radius + 5, center_y - 10), f'({center_x}, {center_y})', fill="red")
-            draw.text((box[0], box[1] - 20), f'#{i + 1}', fill="blue")
 
     draw_detected_object_boxes(draw, centers, contours, box_size,
                                cv2.imread(binary_larger_image_path, cv2.IMREAD_GRAYSCALE), centers)
@@ -265,7 +289,11 @@ def draw_detected_object_boxes(draw, centers, contours, box_size, image_array, o
 
             # Adjust box positions
             px, py, ox, oy = adjust_box_position(px, py, cx, cy, half_box_size)
-            px, py, ox, oy = move_box_away(px, py, cx, cy, half_box_size, image_array.shape, image_array, other_centers)
+            px, py, ox, oy = move_box_to_best_position(px, py, cx, cy, half_box_size, image_array.shape, image_array,
+                                                       other_centers)
+
+            if is_box_overlapping_with_others(px, py, ox, oy, half_box_size, other_centers, image_array):
+                continue
 
             # Calculate box center positions for connecting line
             box1_center_x, box1_center_y = px, py
@@ -316,6 +344,21 @@ def draw_detected_object_boxes(draw, centers, contours, box_size, image_array, o
             # Display the angle difference between box center line and connecting line
             draw.text((box1_center_x - 15, box1_center_y + 15), f'Diff: {angle1_diff:.2f}°', fill="cyan")
             draw.text((box2_center_x - 15, box2_center_y + 15), f'Diff: {angle2_diff:.2f}°', fill="cyan")
+
+
+def is_box_overlapping_with_others(px, py, ox, oy, half_box_size, other_centers, image_array):
+    """Check if the box overlaps with other objects."""
+    for center_x, center_y in other_centers:
+        if np.linalg.norm(np.array([px, py]) - np.array([center_x, center_y])) < 2 * half_box_size or \
+                np.linalg.norm(np.array([ox, oy]) - np.array([center_x, center_y])) < 2 * half_box_size:
+            return True
+
+    # Additionally check if the box overlaps with any white pixels (indicating other objects)
+    if has_white_under_box(image_array, px, py, half_box_size) or has_white_under_box(image_array, ox, oy,
+                                                                                      half_box_size):
+        return True
+
+    return False
 
 
 def align_to_nearest_angle(angle):

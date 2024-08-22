@@ -23,17 +23,17 @@ class ModelProperties:
                   foreground=[('readonly', 'black')])
 
     def add_property(self, attr_name, label_text, row, value, is_combobox=False, values=None):
-        label = tk.Label(self.properties_panel.properties_frame, text=label_text, bg='white', font=("Helvetica", 12))
+        label = tk.Label(self.properties_panel.properties_frame, text=label_text, bg='white', font=("Helvetica", 10))
         label.grid(row=row, column=0, sticky='w', padx=10, pady=5)
 
         if is_combobox:
-            combobox = ttk.Combobox(self.properties_panel.properties_frame, values=values, font=("Helvetica", 12),
+            combobox = ttk.Combobox(self.properties_panel.properties_frame, values=values, font=("Helvetica", 10),
                                     width=10, style="CustomCombobox.TCombobox")
             combobox.set(value)
             combobox.grid(row=row, column=1, padx=10, pady=5)
             setattr(self, attr_name, combobox)
         else:
-            entry = tk.Entry(self.properties_panel.properties_frame, font=("Helvetica", 12), width=11,
+            entry = tk.Entry(self.properties_panel.properties_frame, font=("Helvetica", 10), width=11,
                              highlightthickness=1, highlightbackground='black',
                              highlightcolor='black')
             entry.insert(0, value)
@@ -46,7 +46,7 @@ class ModelProperties:
         # Display model name at the top
         model_name_label = tk.Label(self.properties_panel.properties_frame,
                                     text=language.translate("Model Name: ") + model_info['name'],
-                                    bg='white', font=("Helvetica", 14, 'bold'))
+                                    bg='white', font=("Helvetica", 10, 'bold'))
         model_name_label.grid(row=0, column=0, columnspan=2, pady=(10, 10))
 
         # Use add_property with attribute names
@@ -66,7 +66,7 @@ class ModelProperties:
         # Add Box Size slider
         box_size_label = tk.Label(self.properties_panel.properties_frame, text=language.translate("box_size"),
                                   bg='white',
-                                  font=("Helvetica", 12))
+                                  font=("Helvetica", 10))
         box_size_label.grid(row=11, column=0, sticky='w', padx=10, pady=5)
 
         self.box_size_slider = tk.Scale(self.properties_panel.properties_frame, from_=10, to=200, orient=tk.HORIZONTAL)
@@ -76,7 +76,7 @@ class ModelProperties:
         # Add update button
         update_button = tk.Button(self.properties_panel.properties_frame, text=language.translate("Update"),
                                   command=lambda: self.update_model_properties(model_info['name']),
-                                  font=("Helvetica", 12))
+                                  font=("Helvetica", 10))
         update_button.grid(row=12, column=0, columnspan=2, pady=(10, 10))
 
     def update_model_properties(self, model_name):

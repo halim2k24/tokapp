@@ -5,7 +5,6 @@ from partials.ppproperties_handler import PropertiesHandler
 from partials.model_properties import ModelProperties
 
 
-
 class PropertiesPanel(tk.Frame):
     def __init__(self, parent, root):
         super().__init__(parent, bg='white', relief='solid', borderwidth=1)
@@ -82,6 +81,10 @@ class PropertiesPanel(tk.Frame):
         shape = self.select_shape.get()
         if shape == language.translate("rectangle") and self.image_view:
             self.image_view.enable_rectangle_drawing()
+        elif shape == language.translate("circle") and self.image_view:
+            self.image_view.enable_circle_drawing()
+        elif shape == language.translate("ring") and self.image_view:
+            self.image_view.enable_ring_drawing()
 
     def save_and_crop_image(self):
         model_name = self.name_entry.get()
@@ -117,4 +120,3 @@ class PropertiesPanel(tk.Frame):
         # Implement logic to determine if the properties panel is in new model mode
         # This could be based on whether the new model creation form is visible or active
         return hasattr(self, 'new_model_label') and self.new_model_label.winfo_exists()
-
