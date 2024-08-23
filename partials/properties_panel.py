@@ -13,6 +13,7 @@ class PropertiesPanel(tk.Frame):
         self.root = root
         self.image_view = None  # Reference to the ImageView instance
         self.task_panel = None  # Reference to the TaskPanel instance
+        self.current_item = None  # Variable to track the current drawing mode
         self.create_widgets()
 
         self.properties_handler = PropertiesHandler(self)
@@ -73,17 +74,44 @@ class PropertiesPanel(tk.Frame):
         self.select_shape.bind("<<ComboboxSelected>>", self.shape_selected)
 
         self.save_button = tk.Button(self.properties_frame, text=language.translate("save"),
-                                     command=self.save_and_crop_image, bg="#00008B", fg="white",
+                                     command=self.trigger_save_image, bg="#00008B", fg="white",
                                      font=("Helvetica", 12, "bold"), padx=10, pady=10)
         self.save_button.grid(row=3, columnspan=2, pady=10, sticky='nsew')
+
+    def trigger_save_image(self):
+        # Model info to be passed to the save function
+
+        model_info = self.get_model_info()
+        # Check the current drawing mode and call the appropriate save function
+        if self.current_item == "rectangle":
+            print("Saving rectangle image...")
+            self.image_view.crop_rectangle_and_save_image(model_info)
+        elif self.current_item == "circle":
+            print("Saving circle image...")
+            self.image_view.crop_circle_and_save_image(model_info)
+        elif self.current_item == "ring":
+            print("Saving ring image...")
+            self.image_view.crop_ring_and_save_image(model_info)
+        else:
+            print("No drawing mode selected or recognized.")
+
+        # Ensure that the new model is added to the Task Panel
+        if self.task_panel:
+            self.task_panel.add_new_model_to_task_panel(model_info)
+        else:
+            print("Task panel is not available.")
+
 
     def shape_selected(self, event):
         shape = self.select_shape.get()
         if shape == language.translate("rectangle") and self.image_view:
+            self.current_item = "rectangle"  # Update current item
             self.image_view.enable_rectangle_drawing()
         elif shape == language.translate("circle") and self.image_view:
+            self.current_item = "circle"  # Update current item
             self.image_view.enable_circle_drawing()
         elif shape == language.translate("ring") and self.image_view:
+            self.current_item = "ring"  # Update current item
             self.image_view.enable_ring_drawing()
 
     def save_and_crop_image(self):
@@ -95,13 +123,24 @@ class PropertiesPanel(tk.Frame):
         print("Save and Crop Image button clicked")
         model_info = self.get_model_info()
         print(f"Model Info to be Saved: {model_info}")
+
         if self.image_view:
-            self.image_view.crop_and_save_image(model_info)
+            # Determine the selected shape and call the appropriate crop function
+            shape = model_info.get('shape')
+
+            if shape == language.translate("rectangle"):
+                self.image_view.crop_rectangle_and_save_image(model_info)
+            elif shape == language.translate("circle"):
+                self.image_view.crop_circle_and_save_image(model_info)
+            elif shape == language.translate("ring"):
+                self.image_view.crop_ring_and_save_image(model_info)  # Assuming you have a ring-specific save method
+
             # Add the new model to the task panel
             if self.task_panel:
                 self.task_panel.add_new_model_to_task_panel(model_info)
             # Update the image view with the new model
             self.image_view.update_image()
+
 
     def get_model_info(self):
         try:

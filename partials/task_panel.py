@@ -205,7 +205,7 @@ class TaskPanel(tk.Frame):
         self.add_model_button_widget(model_info)
 
     def on_button_click(self, button, command):
-        if self.active_button:
+        if self.active_button and self.active_button.winfo_exists():
             self.active_button.config(bg='gray')
         button.config(bg='#00008B')
         self.active_button = button
