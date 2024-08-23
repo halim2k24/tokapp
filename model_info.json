@@ -61,28 +61,17 @@
         "matching": "",
         "detection_order": "Maximum Matching %",
         "Count": "",
-        "box_size": 64
+        "box_size": 99
     },
     {
-        "name": "c1",
-        "shape": "Circle",
-        "image_path": "images/c1_1724372468.png",
-        "centerX": 103,
-        "centerY": 102,
-        "width": 194,
-        "height": 194,
-        "radius": 97,
-        "diameter": 194
-    },
-    {
-        "name": "r1",
+        "name": "Mo1",
         "shape": "Ring",
-        "image_path": "images/r1_1724372537.png",
-        "centerX": 100,
-        "centerY": 100,
-        "width": 183,
-        "height": 183,
-        "radius": 91,
-        "diameter": 182
+        "image_path": "images/Mo1_1724390821.png",
+        "centerX": 129,
+        "centerY": 130,
+        "width": 241,
+        "height": 242,
+        "radius": 121,
+        "diameter": 242
     }
 ]
