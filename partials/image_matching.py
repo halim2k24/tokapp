@@ -1,13 +1,15 @@
 import os
 import cv2
 import numpy as np
+from matplotlib import pyplot as plt
 from skimage.metrics import structural_similarity as ssim
 from PIL import Image, ImageDraw, ImageOps
 import math
 import json
 
 
-def extract_objects(image):
+
+def extract_objects(image, model_shape="rectangle"):
     blurred = cv2.GaussianBlur(image, (5, 5), 0)
     thresh = cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
                                    cv2.THRESH_BINARY, 11, 2)
@@ -19,19 +21,50 @@ def extract_objects(image):
         x, y, w, h = cv2.boundingRect(cnt)
         if w == 0 or h == 0:
             continue
-        obj = image[y:y + h, x:x + w]
 
-        M = cv2.moments(cnt)
-        if M["m00"] != 0:
-            cx = int(M["m10"] / M["m00"])
-            cy = int(M["m01"] / M["m00"])
-        else:
-            cx, cy = x + w // 2, y + h // 2
+        obj = None
+        if model_shape == "rectangle":
+            obj = image[y:y + h, x:x + w]  # Rectangle extraction
+        elif model_shape == "circle":
+            obj = image[y:y + h, x:x + w]
+        elif model_shape == "ring":
+            obj = extract_ring_object(image, x, y, w, h)  # Ring extraction
 
-        objects.append((obj, (x, y, w, h), (cx, cy), cnt))
+        if obj is not None:
+            M = cv2.moments(cnt)
+            if M["m00"] != 0:
+                cx = int(M["m10"] / M["m00"])
+                cy = int(M["m01"] / M["m00"])
+            else:
+                cx, cy = x + w // 2, y + h // 2
+
+            objects.append((obj, (x, y, w, h), (cx, cy), cnt))
+
+    # Display extracted ring objects using matplotlib
+    # for i, (obj, _, _, _) in enumerate(objects):
+    #     if model_shape == "ring" and obj is not None:
+    #         plt.figure(figsize=(4, 4))
+    #         plt.imshow(obj, cmap='gray')
+    #         plt.title(f'Extracted Ring {i+1}')
+    #         plt.axis('off')
+    #         plt.show()
 
     return objects
 
+def extract_ring_object(image, x, y, w, h):
+    """Extracts a ring region from the image."""
+    mask = np.zeros_like(image)
+    outer_radius = min(w, h) // 2
+    inner_radius = outer_radius // 2  # Assuming a fixed ratio for simplicity, adjust as needed
+
+    # Draw the outer circle
+    cv2.circle(mask, (x + w // 2, y + h // 2), outer_radius, 255, -1)
+    # Subtract the inner circle
+    cv2.circle(mask, (x + w // 2, y + h // 2), inner_radius, 0, -1)
+
+    # Apply the mask to extract the ring shape
+    ring_obj = cv2.bitwise_and(image, mask)
+    return ring_obj[y:y + h, x:x + w]
 
 def non_max_suppression(boxes, overlapThresh):
     if len(boxes) == 0:
@@ -94,7 +127,8 @@ def sort_objects_by_order(centers, match_percentages, contours, order):
     return zip(*sorted_objects)
 
 
-def find_and_match_object(reference_image_path, larger_image_path, threshold=0.8, overlap_thresh=0.3):
+def find_and_match_object(reference_image_path, larger_image_path, model_shape="ring", threshold=0.4,
+                          overlap_thresh=0.3):
     reference_image = cv2.imread(reference_image_path, cv2.IMREAD_GRAYSCALE)
     larger_image = cv2.imread(larger_image_path, cv2.IMREAD_GRAYSCALE)
 
@@ -102,8 +136,8 @@ def find_and_match_object(reference_image_path, larger_image_path, threshold=0.8
         print("Error loading images.")
         return [], [], [], 0
 
-    reference_objects = extract_objects(reference_image)
-    larger_objects = extract_objects(larger_image)
+    reference_objects = extract_objects(reference_image, model_shape)
+    larger_objects = extract_objects(larger_image, model_shape)
 
     print(f"Extracted {len(reference_objects)} objects from the reference image.")
     print(f"Extracted {len(larger_objects)} objects from the larger image.")
@@ -114,22 +148,21 @@ def find_and_match_object(reference_image_path, larger_image_path, threshold=0.8
     contours = []
     count_10_percent = 0
 
-    for (larger_obj, (lx, ly, lw, lh), (lcx, lcy), larger_cnt) in larger_objects:
+    for obj_idx, (larger_obj, (lx, ly, lw, lh), (lcx, lcy), larger_cnt) in enumerate(larger_objects):
         best_score = 0
         best_box = None
         best_contour = None
 
-        for (ref_obj, (rx, ry, rw, rh), (rcx, rcy), ref_cnt) in reference_objects:
+        for i, (ref_obj, (rx, ry, rw, rh), (rcx, rcy), ref_cnt) in enumerate(reference_objects):
             if ref_obj.size == 0 or larger_obj.size == 0:
                 continue
 
+            # Resize the target ring to match the reference ring for fair comparison
             resized_larger_obj = cv2.resize(larger_obj, (ref_obj.shape[1], ref_obj.shape[0]))
 
-            win_size = min(resized_larger_obj.shape[0], resized_larger_obj.shape[1], 7)
-            if win_size < 7:
-                continue
 
-            ssim_index = ssim(ref_obj, resized_larger_obj, win_size=win_size)
+            # Compare the ring section
+            ssim_index = ssim(ref_obj, resized_larger_obj)
 
             if ssim_index > best_score:
                 best_score = ssim_index
@@ -153,6 +186,13 @@ def find_and_match_object(reference_image_path, larger_image_path, threshold=0.8
     print(f"Objects matching >= 10%: {count_10_percent}")
 
     return boxes, scores, centers, contours, count_10_percent
+
+
+def match_ring_objects(reference_ring, target_ring):
+    """Only compare the ring section (inner and outer boundary area)"""
+    ssim_index = ssim(reference_ring, target_ring)
+    return ssim_index
+
 
 
 def adjust_box_position(px, py, cx, cy, half_box_size):
