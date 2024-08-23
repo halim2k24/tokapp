@@ -3,7 +3,7 @@ import os
 import tkinter as tk
 from datetime import time
 
-from PIL import Image, ImageTk
+from PIL import Image, ImageTk, ImageDraw
 import json
 from helper.language import language
 from helper.rotating_rectangle import RotatingRectangle
@@ -360,7 +360,7 @@ class ImageView(tk.Frame):
         for pos in inner_handle_positions:
             handle_id = self.canvas.create_rectangle(pos[0] - handle_size // 2, pos[1] - handle_size // 2,
                                                      pos[0] + handle_size // 2, pos[1] + handle_size // 2,
-                                                     fill='blue')
+                                                     fill='pink')
             self.handles.append(handle_id)
 
     def check_ring_click(self, x, y):
@@ -751,7 +751,6 @@ class ImageView(tk.Frame):
                                pos[0] + handle_size // 2, pos[1] + handle_size // 2)
 
     def handle_image_click(self, event):
-        # ইমেজের উপরে ইভেন্ট ধরার জন্য ক্লিক ইভেন্ট হ্যান্ডলিং
         if self.ring_mode:
             self.handle_point_selection_for_ring(event)
         else:
@@ -853,6 +852,54 @@ class ImageView(tk.Frame):
         self.title_label_b.config(text=language.translate("image_view"))
 
 
+    def crop_circle_and_save_image(self, model_info):
+        if not self.circle_center or not self.circle_radius or not self.current_image:
+            print("Circle data or current image is missing")
+            return
+
+        # Convert canvas circle coordinates to image coordinates
+        canvas_bbox = self.canvas.bbox(self.image_id)
+        image_x, image_y = canvas_bbox[0], canvas_bbox[1]
+        circle_center_x = self.circle_center[0] - image_x
+        circle_center_y = self.circle_center[1] - image_y
+
+        # Create a mask for the circular area
+        mask = Image.new('L', self.current_image.size, 0)
+        draw = ImageDraw.Draw(mask)
+        draw.ellipse(
+            (circle_center_x - self.circle_radius, circle_center_y - self.circle_radius,
+             circle_center_x + self.circle_radius, circle_center_y + self.circle_radius),
+            fill=255
+        )
+
+        # Apply the mask to the image to extract the circular area
+        circular_area = Image.new('RGB', self.current_image.size)
+        circular_area.paste(self.current_image, mask=mask)
+
+        # Crop the circular area from the image
+        left = int(circle_center_x - self.circle_radius)
+        top = int(circle_center_y - self.circle_radius)
+        right = int(circle_center_x + self.circle_radius)
+        bottom = int(circle_center_y + self.circle_radius)
+        cropped_image = circular_area.crop((left, top, right, bottom))
+
+        # Save the cropped image
+        if not os.path.exists("images"):
+            os.makedirs("images")
+
+        timestamp = int(time.time())
+        cropped_image_path = f"images/{model_info['name']}_circle_{timestamp}.png"
+        cropped_image.save(cropped_image_path)
+
+        # Save model info to JSON
+        model_info['image_path'] = cropped_image_path
+        json_path = "model_info.json"
+        self.update_model_info_json(model_info, json_path)
+
+        print(f"Model info saved to {json_path}")
+        print(f"Cropped image saved to {cropped_image_path}")
+
+
     def crop_and_save_image(self, model_info):
         if not self.rotating_rectangle or not self.current_image:
             print("Rotating rectangle or current image is missing")
@@ -918,6 +965,132 @@ class ImageView(tk.Frame):
         nx = cos_val * (x - cx) - sin_val * (y - cy) + cx
         ny = sin_val * (x - cx) + cos_val * (y - cy) + cy
         return nx, ny
+
+    def crop_rectangle_and_save_image(self, model_info):
+        if not self.rotating_rectangle or not self.current_image:
+            print("Rotating rectangle or current image is missing")
+            return
+
+        # Get the bounding box coordinates of the rectangle on the canvas
+        bbox = self.rotating_rectangle.get_rotated_coords()
+
+        # Convert the bounding box from canvas coordinates to image coordinates
+        canvas_bbox = self.canvas.bbox(self.image_id)
+        x_offset, y_offset = canvas_bbox[0], canvas_bbox[1]
+
+        # Adjust bbox to be relative to the image
+        adjusted_bbox = [(x - x_offset, y - y_offset) for x, y in bbox]
+
+        # Get the image array
+        img_array = np.array(self.current_image)
+
+        # Calculate the crop bounds within the image based on the adjusted bbox
+        x_coords = [int(x) for x, y in adjusted_bbox]
+        y_coords = [int(y) for x, y in adjusted_bbox]
+        min_x, max_x = max(0, min(x_coords)), min(img_array.shape[1], max(x_coords))
+        min_y, max_y = max(0, min(y_coords)), min(img_array.shape[0], max(y_coords))
+
+        # Crop the image within the calculated bounds
+        cropped_img_array = img_array[min_y:max_y, min_x:max_x]
+
+        # Convert the cropped array back to an image
+        cropped_image = Image.fromarray(cropped_img_array)
+
+        # Save the cropped image
+        self.save_cropped_image(cropped_image, model_info)
+
+    def crop_circle_and_save_image(self, model_info):
+        if not self.circle_id or not self.current_image:
+            print("Circle or current image is missing")
+            return
+
+        # Get circle coordinates and radius
+        coords = self.canvas.coords(self.circle_id)
+        x_center = (coords[0] + coords[2]) / 2
+        y_center = (coords[1] + coords[3]) / 2
+        radius = (coords[2] - coords[0]) / 2
+
+        # Convert the canvas coordinates to image coordinates
+        img_array = np.array(self.current_image)
+        canvas_bbox = self.canvas.bbox(self.image_id)
+
+        # Calculate the circular crop
+        x_center_image = x_center - canvas_bbox[0]
+        y_center_image = y_center - canvas_bbox[1]
+        mask = np.zeros_like(img_array)
+        cv2.circle(mask, (int(x_center_image), int(y_center_image)), int(radius), (255, 255, 255), -1)
+        cropped_img_array = cv2.bitwise_and(img_array, mask)
+
+        # Create a bounding box around the circle
+        min_x, max_x = int(x_center_image - radius), int(x_center_image + radius)
+        min_y, max_y = int(y_center_image - radius), int(y_center_image + radius)
+        cropped_img_array = cropped_img_array[min_y:max_y, min_x:max_x]
+
+        cropped_image = Image.fromarray(cropped_img_array)
+
+        # Save the cropped image
+        self.save_cropped_image(cropped_image, model_info)
+
+    def crop_ring_and_save_image(self, model_info):
+        if not self.ring_outer_id or not self.ring_inner_id or not self.current_image:
+            print("Ring or current image is missing")
+            return
+
+        # Get outer and inner circle coordinates and radius
+        outer_coords = self.canvas.coords(self.ring_outer_id)
+        inner_coords = self.canvas.coords(self.ring_inner_id)
+        x_center = (outer_coords[0] + outer_coords[2]) / 2
+        y_center = (outer_coords[1] + outer_coords[3]) / 2
+        outer_radius = (outer_coords[2] - outer_coords[0]) / 2
+        inner_radius = (inner_coords[2] - inner_coords[0]) / 2
+
+        # Convert the canvas coordinates to image coordinates
+        img_array = np.array(self.current_image)
+        canvas_bbox = self.canvas.bbox(self.image_id)
+
+        # Calculate the ring crop
+        x_center_image = x_center - canvas_bbox[0]
+        y_center_image = y_center - canvas_bbox[1]
+        mask = np.zeros_like(img_array)
+
+        # Create the ring mask
+        cv2.circle(mask, (int(x_center_image), int(y_center_image)), int(outer_radius), (255, 255, 255), -1)
+        cv2.circle(mask, (int(x_center_image), int(y_center_image)), int(inner_radius), (0, 0, 0), -1)
+        cropped_img_array = cv2.bitwise_and(img_array, mask)
+
+        # Create a bounding box around the outer circle
+        min_x, max_x = int(x_center_image - outer_radius), int(x_center_image + outer_radius)
+        min_y, max_y = int(y_center_image - outer_radius), int(y_center_image + outer_radius)
+        cropped_img_array = cropped_img_array[min_y:max_y, min_x:max_x]
+
+        cropped_image = Image.fromarray(cropped_img_array)
+
+        # Save the cropped image
+        self.save_cropped_image(cropped_image, model_info)
+
+    def save_cropped_image(self, cropped_image, model_info):
+        # Save the cropped image to the filesystem
+        if not os.path.exists("images"):
+            os.makedirs("images")
+
+        timestamp = int(time.time())
+        cropped_image_path = f"images/{model_info['name']}_{timestamp}.png"
+        cropped_image.save(cropped_image_path)
+
+        # Update model info and save to JSON
+        model_info['image_path'] = cropped_image_path
+        json_path = "model_info.json"
+        self.update_model_info_json(model_info, json_path)
+
+        print(f"Model info saved to {json_path}")
+        print(f"Cropped image saved to {cropped_image_path}")
+
+        # Clear the drawing (circle/rectangle/ring) after saving
+        self.clear_canvas()
+
+
+
+
 
     def update_model_info_json(self, model_info, json_path):
         try:
