@@ -128,38 +128,32 @@ def find_and_match_object(reference_image_path, larger_image_path, threshold=0.8
     return boxes, scores, centers, contours, count_10_percent
 
 
-def adjust_box_position(px, py, cx, cy, half_box_size):
-    vx = px - cx
-    vy = py - cy
-    mag = np.sqrt(vx ** 2 + vy ** 2)
-    vx /= mag
-    vy /= mag
-    px = int(px + vx * half_box_size)
-    py = int(py + vy * half_box_size)
-    ox = int(cx + (cx - px))
-    oy = int(cy + (cy - py))
-    return (px, py, ox, oy)
+def adjust_box_position(cx, cy, radius):
+    px = cx + radius  # Point on the right edge of the circle
+    py = cy  # Same y-coordinate as the center
+    return (cx, cy, px, py)
 
 
 def draw_detected_object_boxes(draw, centers, contours, box_size):
-    half_box_size = box_size // 2
     for center, contour in zip(centers, contours):
         if len(contour) > 0:
             cx, cy = center
-            point = contour[0][0]
-            px, py = point
 
-            px, py, ox, oy = adjust_box_position(px, py, cx, cy, half_box_size)
+            # Approximate the radius of the circle
+            radius = int(cv2.minEnclosingCircle(contour)[1])
 
-            draw.rectangle([px - half_box_size, py - half_box_size, px + half_box_size, py + half_box_size],
-                           outline="red", width=2)
-            draw.rectangle([ox - half_box_size, oy - half_box_size, ox + half_box_size, oy + half_box_size],
-                           outline="red", width=2)
-            draw.line([px, py, cx, cy], fill="red", width=1)
-            draw.line([ox, oy, cx, cy], fill="red", width=1)
-            draw.ellipse((px - 2, py - 2, px + 2, py + 2), fill="green")
-            draw.ellipse((ox - 2, oy - 2, ox + 2, oy + 2), fill="green")
-            draw.ellipse((cx - 2, cy - 2, cx + 2, cy + 2), fill="blue")
+            cx, cy, px, py = adjust_box_position(cx, cy, radius)
+
+            # Draw the fixed point at the center
+            draw.ellipse((cx - 5, cy - 5, cx + 5, cy + 5), fill="blue")
+            draw.text((cx + 5, cy - 10), 'Center', fill="blue")
+
+            # Draw the point on the right edge of the circle
+            draw.ellipse((px - 5, py - 5, px + 5, py + 5), fill="green")
+            draw.text((px + 5, py - 10), 'Right Edge', fill="green")
+
+            # Draw a line between the center and the right edge
+            draw.line([cx, cy, px, py], fill="red", width=2)
 
 
 def calculate_and_display_matches(image_view, reference_image_path, larger_image_path):
